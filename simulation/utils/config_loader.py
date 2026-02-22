@@ -393,7 +393,7 @@ def create_sensitivity_analysis_config():
             "method": "morris",  # Morris elementary effects screening
             "parameters_to_vary": [
                 "loss_aversion.baseline_coefficient",
-                "loss_aversion.income_sensitivity", 
+                "loss_aversion.variation_std",
                 "present_bias.beta_min",
                 "present_bias.beta_max",
                 "status_quo.baseline_strength",
@@ -402,7 +402,7 @@ def create_sensitivity_analysis_config():
             ],
             "parameter_ranges": {
                 "loss_aversion.baseline_coefficient": [1.5, 3.0],
-                "loss_aversion.income_sensitivity": [0.1, 0.4],
+                "loss_aversion.variation_std": [0.05, 0.2],
                 "present_bias.beta_min": [0.5, 0.7],
                 "present_bias.beta_max": [0.7, 0.9],
                 "status_quo.baseline_strength": [0.6, 0.9],  # CORRECTED: Updated for new range

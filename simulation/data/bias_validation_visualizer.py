@@ -122,14 +122,17 @@ class BiasValidationVisualizer:
         if bias_name == 'loss_aversion':
             # Plot loss aversion coefficient distribution
             baseline_coeff = params['baseline_coefficient']
-            income_sensitivity = params['income_sensitivity']
+            min_coeff = params.get('min_coefficient', 1.5)
+            max_coeff = params.get('max_coefficient', 3.0)
             
             # Generate income range
             incomes = np.logspace(np.log10(20000), np.log10(120000), 1000)
             median_income = np.exp(INCOME_LOGNORMAL_MEAN)
             
             # Calculate λ_i for each income level
-            lambda_i = baseline_coeff * (median_income / incomes) ** income_sensitivity
+            income_ratio = (median_income - incomes) / median_income
+            lambda_i = baseline_coeff + np.tanh(income_ratio)
+            lambda_i = np.clip(lambda_i, min_coeff, max_coeff)
             
             ax.plot(incomes, lambda_i, linewidth=3, color='#ff7f0e', label='λ(income)')
             ax.axhline(y=baseline_coeff, color='red', linestyle='--', alpha=0.7, 
@@ -373,18 +376,21 @@ class BiasValidationVisualizer:
         
         params = BEHAVIORAL_BIASES['loss_aversion']['parameters']
         baseline_coeff = params['baseline_coefficient']
-        income_sensitivity = params['income_sensitivity']
+        min_coeff = params.get('min_coefficient', 1.5)
+        max_coeff = params.get('max_coefficient', 3.0)
         median_income = np.exp(INCOME_LOGNORMAL_MEAN)
         
         # Plot 1: Loss aversion coefficient vs income
         ax = axes[0, 0]
         incomes = np.logspace(np.log10(20000), np.log10(120000), 1000)
-        lambda_i = baseline_coeff * (median_income / incomes) ** income_sensitivity
+        income_ratio = (median_income - incomes) / median_income
+        lambda_i = baseline_coeff + np.tanh(income_ratio)
+        lambda_i = np.clip(lambda_i, min_coeff, max_coeff)
         
         ax.plot(incomes, lambda_i, linewidth=3, color='#ff7f0e')
         ax.axhline(y=baseline_coeff, color='red', linestyle='--', alpha=0.7, 
                   label=f'Baseline: {baseline_coeff}')
-        ax.axvspan(1.5, 4.0, alpha=0.2, color='green', label='Literature Range')
+        ax.axhspan(1.5, 4.0, alpha=0.2, color='green', label='Literature Range')
         
         ax.set_xlabel('Household Income ($)')
         ax.set_ylabel('Loss Aversion Coefficient (λ)')
@@ -397,8 +403,14 @@ class BiasValidationVisualizer:
         ax = axes[0, 1]
         income_classes = np.array([1, 2, 3, 4, 5])
         class_incomes = [25000, 40000, 55000, 75000, 100000]  # Representative incomes
-        class_lambdas = [baseline_coeff * (median_income / inc) ** income_sensitivity 
-                        for inc in class_incomes]
+        class_lambdas = [
+            np.clip(
+                baseline_coeff + np.tanh((median_income - inc) / median_income),
+                min_coeff,
+                max_coeff
+            )
+            for inc in class_incomes
+        ]
         installation_cost = 15000
         
         # NPV adjustment for each class

@@ -452,10 +452,13 @@ class BiasManager:
         # Calculate effect of each bias individually
         for bias_name in self.enabled_biases:
             try:
-                biased_prob = self.apply_single_bias(household, bias_name, base_npv, base_probability)
+                adjusted_npv, biased_prob = self.apply_single_bias(
+                    household, bias_name, base_npv, base_probability
+                )
                 effect_multiplier = biased_prob / base_probability if base_probability > 0 else 1.0
                 
                 summary['bias_effects'][bias_name] = {
+                    'biased_npv': adjusted_npv,
                     'biased_probability': biased_prob,
                     'effect_multiplier': effect_multiplier,
                     'probability_change': biased_prob - base_probability
@@ -463,9 +466,13 @@ class BiasManager:
                 
                 # Add bias-specific details
                 if bias_name == 'loss_aversion':
-                    lambda_base = self.bias_params['loss_aversion']['baseline_coefficient']
-                    income_sensitivity = self.bias_params['loss_aversion']['income_sensitivity']
-                    lambda_i = lambda_base * (self.median_income / household.income) ** income_sensitivity
+                    params = self.bias_params['loss_aversion']
+                    lambda_base = params['baseline_coefficient']
+                    income_ratio = (self.median_income - household.income) / self.median_income
+                    income_effect = np.tanh(income_ratio)
+                    epsilon_i = household.get_behavioral_coefficient('loss_aversion', 'variation_std')
+                    lambda_i = lambda_base + income_effect + epsilon_i
+                    lambda_i = np.clip(lambda_i, params['min_coefficient'], params['max_coefficient'])
                     summary['bias_effects'][bias_name]['loss_aversion_coefficient'] = lambda_i
                 
                 elif bias_name == 'herding':
@@ -485,9 +492,10 @@ class BiasManager:
         
         # Combined effect
         try:
-            combined_prob = self.apply_all_biases(household, base_npv, base_probability)
+            final_npv, combined_prob = self.apply_all_biases(household, base_npv, base_probability)
             combined_effect = combined_prob / base_probability if base_probability > 0 else 1.0
             summary['combined_effect'] = {
+                'final_npv': final_npv,
                 'final_probability': combined_prob,
                 'total_multiplier': combined_effect,
                 'total_probability_change': combined_prob - base_probability
@@ -536,7 +544,7 @@ class BiasManager:
         
         for bias_name in self.enabled_biases:
             try:
-                biased_prob = self.apply_single_bias(test_household, bias_name, base_npv, base_prob)
+                _, biased_prob = self.apply_single_bias(test_household, bias_name, base_npv, base_prob)
                 
                 if not (0 <= biased_prob <= 1):
                     errors.append(f"{bias_name} produced invalid probability: {biased_prob}")
@@ -561,7 +569,7 @@ class BiasManager:
         
         # Test combined bias application
         try:
-            combined_prob = self.apply_all_biases(test_household, base_npv, base_prob)
+            _, combined_prob = self.apply_all_biases(test_household, base_npv, base_prob)
             if not (0 <= combined_prob <= 1):
                 errors.append(f"Combined bias produced invalid probability: {combined_prob}")
         except Exception as e:
@@ -744,13 +752,13 @@ def test_enhanced_bias_manager():
         
         # Test each bias individually
         for bias_name in bias_manager.enabled_biases:
-            biased_prob = bias_manager.apply_single_bias(mock_household, bias_name, base_npv, base_prob)
+            _, biased_prob = bias_manager.apply_single_bias(mock_household, bias_name, base_npv, base_prob)
             effect = biased_prob / base_prob if base_prob > 0 else 1.0
             print(f"    {bias_name}: {effect:.3f}x effect (prob: {base_prob:.3f} → {biased_prob:.3f})")
         
         # Test 4: Combined bias effects with proper chaining
         print("  Test 4: Combined bias effects (corrected chaining)...")
-        combined_prob = bias_manager.apply_all_biases(mock_household, base_npv, base_prob)
+        _, combined_prob = bias_manager.apply_all_biases(mock_household, base_npv, base_prob)
         combined_effect = combined_prob / base_prob if base_prob > 0 else 1.0
         print(f"    Combined effect: {combined_effect:.3f}x (prob: {base_prob:.3f} → {combined_prob:.3f})")
         

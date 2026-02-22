@@ -10,7 +10,7 @@ YEARS_TO_SIMULATE = 20
 TOTAL_STEPS = YEARS_TO_SIMULATE * MONTHS_IN_YEAR
 
 # Population parameters
-NUM_HOUSEHOLDS = 5000
+NUM_HOUSEHOLDS = 100
 NEIGHBORS_PER_HOUSEHOLD = 10
 
 # Income parameters - ENHANCED for better heterogeneity
