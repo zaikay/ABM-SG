@@ -43,7 +43,9 @@ class SimulationConfig:
                 "discount_rate": DISCOUNT_RATE,
                 "base_cost": BASE_SOLAR_COST,
                 "annual_cost_reduction": SOLAR_COST_REDUCTION_ANNUAL,
-                "solar_production_ratio": SOLAR_PRODUCTION_RATIO
+                "solar_production_ratio": SOLAR_PRODUCTION_RATIO,
+                "fixed_cost": SOLAR_FIXED_COSTS,
+                "variable_cost_per_kw": SOLAR_VARIABLE_COST_PER_KW
             },
             "grid_params": {
                 "feed_in_factor": FEED_IN_FACTOR,
@@ -397,6 +399,9 @@ def create_sensitivity_analysis_config():
                 "present_bias.beta_min",
                 "present_bias.beta_max",
                 "status_quo.baseline_strength",
+                "solar_params.fixed_cost",
+                "solar_params.variable_cost_per_kw",
+                "solar_params.annual_cost_reduction",
                 "herding.spatial_beta_shape_a",
                 "herding.class_beta_shape_a"
             ],
@@ -406,6 +411,9 @@ def create_sensitivity_analysis_config():
                 "present_bias.beta_min": [0.5, 0.7],
                 "present_bias.beta_max": [0.7, 0.9],
                 "status_quo.baseline_strength": [0.6, 0.9],  # CORRECTED: Updated for new range
+                "solar_params.fixed_cost": [4500, 7500],
+                "solar_params.variable_cost_per_kw": [1600, 2400],
+                "solar_params.annual_cost_reduction": [0.02, 0.08],
                 "herding.spatial_beta_shape_a": [2.0, 4.0],
                 "herding.class_beta_shape_a": [1.5, 3.0],
                 "herding.bandwagon_beta_shape_a": [1.0, 2.0]  # NEW: Added bandwagon parameter

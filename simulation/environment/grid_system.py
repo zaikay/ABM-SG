@@ -24,6 +24,17 @@ class GridSystem:
         self.fossil_increase_rate = config["grid_params"]["fossil_annual_increase"]
         self.renewable_decrease_rate = config["grid_params"]["renewable_annual_decrease"]
         
+        # Solar cost parameters are now owned by config for sensitivity analysis.
+        solar_params = config.get("solar_params", {})
+        self.base_solar_cost = solar_params.get("base_cost", BASE_SOLAR_COST)
+        self.solar_cost_reduction_annual = solar_params.get(
+            "annual_cost_reduction", SOLAR_COST_REDUCTION_ANNUAL
+        )
+        self.solar_fixed_cost = solar_params.get("fixed_cost", SOLAR_FIXED_COSTS)
+        self.solar_variable_cost_per_kw = solar_params.get(
+            "variable_cost_per_kw", SOLAR_VARIABLE_COST_PER_KW
+        )
+        
         # System metrics
         self.total_consumption = 0
         self.total_prosumer_generation = 0
@@ -68,9 +79,9 @@ class GridSystem:
         years = math.floor(month / MONTHS_IN_YEAR)
         
         # Calculate cost reduction based on technology learning curve
-        reduction_factor = (1 - SOLAR_COST_REDUCTION_ANNUAL) ** years
+        reduction_factor = (1 - self.solar_cost_reduction_annual) ** years
         
-        return BASE_SOLAR_COST * reduction_factor
+        return self.base_solar_cost * reduction_factor
     
     def calculate_npv(self, installation_cost, annual_savings, lifetime=SOLAR_LIFETIME_YEARS, discount_rate=DISCOUNT_RATE):
         """
@@ -156,11 +167,13 @@ class GridSystem:
         """
         # Apply time-based cost reduction
         years = math.floor(month / MONTHS_IN_YEAR)
-        time_factor = (1 - SOLAR_COST_REDUCTION_ANNUAL) ** years
+        time_factor = (1 - self.solar_cost_reduction_annual) ** years
         
         # Calculate cost using fixed + variable structure
         
-        total_cost = (SOLAR_FIXED_COSTS + (SOLAR_VARIABLE_COST_PER_KW * system_size_kw))* time_factor
+        total_cost = (
+            self.solar_fixed_cost + (self.solar_variable_cost_per_kw * system_size_kw)
+        ) * time_factor
         cost_per_kw = total_cost / system_size_kw
         
         return {

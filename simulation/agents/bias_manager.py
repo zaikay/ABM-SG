@@ -133,7 +133,7 @@ class BiasManager:
         #print(f"   Initial: NPV=${current_npv:.0f}, Probability={current_probability:.4f}")
         
         # Define bias application order (herding last due to additive component)
-        bias_order = ['optimism_bias', 'loss_aversion', 'present_bias', 'status_quo', ]
+        bias_order = ['loss_aversion', 'optimism_bias', 'present_bias', 'status_quo', ]
         
         # Apply each enabled bias in the defined order
         for bias_name in bias_order:
