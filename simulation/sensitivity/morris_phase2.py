@@ -44,7 +44,7 @@ PARAMETER_BOUNDS: List[List[float]] = [
     [0.70, 0.85],
     [0.3, 0.9],
     [0.05, 0.20],
-    [0.02, 0.20],
+    [0.05, 0.15],
     [0.0, 1.0],
 ]
 
@@ -86,9 +86,19 @@ def _ensure_output_dir(output_dir: str) -> None:
 
 def _save_static_problem(output_dir: str) -> None:
     problem_path = os.path.join(output_dir, PROBLEM_JSON)
-    if not os.path.exists(problem_path):
-        with open(problem_path, "w", encoding="utf-8") as fh:
-            json.dump(PROBLEM, fh, indent=2)
+    if os.path.exists(problem_path):
+        with open(problem_path, "r", encoding="utf-8") as fh:
+            existing = json.load(fh)
+        if existing != PROBLEM:
+            raise RuntimeError(
+                "Existing Phase-2 problem definition does not match current settings. "
+                "Remove morris_phase2_problem.json, morris_phase2_sample.npy, and "
+                "morris_phase2_points.csv before rerun."
+            )
+        return
+
+    with open(problem_path, "w", encoding="utf-8") as fh:
+        json.dump(PROBLEM, fh, indent=2)
 
 
 def _load_or_create_sample(

@@ -75,7 +75,8 @@ class BiasManager:
         base_effect = params['target_effect_per_neighbor']  # 0.1
         
         # Final effect
-        rho_combined = base_effect * social_influence * (1+susceptibility)
+        rho_combined = base_effect * social_influence * (1 + susceptibility)
+        rho_combined = max(0.0, min(1.0, rho_combined))
         
         return rho_combined
     
@@ -279,7 +280,10 @@ class BiasManager:
         
         
         # Apply Additive effect (conformity pressure) 
-        herding_probability = self._npv_to_probability(npv)+rho_combined
+        # herding_probability = self._npv_to_probability(npv)+rho_combined
+        # Apply bounded additive effect
+        base_p = self._npv_to_probability(npv)
+        herding_probability = base_p + (1.0 - base_p) * rho_combined
 
         if probability > herding_probability :
             print(f"========================== herding_probability: {herding_probability} probability: {probability}")
