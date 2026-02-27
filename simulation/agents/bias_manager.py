@@ -63,7 +63,8 @@ class BiasManager:
         
         # Weighted combination
         spatial_weight = params['spatial_weight']
-        class_weight = params['class_weight'] 
+        class_weight = 1-spatial_weight
+ 
         
         social_influence = (spatial_weight * spatial_influence + 
                             class_weight * class_influence)
