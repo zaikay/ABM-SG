@@ -7,13 +7,23 @@ Removed SafeSimulationVisualizer - now reports exactly what data is missing.
 import os
 import sys
 import time
+import copy
+import random
+import re
 from datetime import datetime
 import argparse
 
 import pandas as pd
+import numpy as np
 
 # Add the simulation package to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Ensure Unicode-safe console output on Windows terminals with non-UTF codepages.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from simulation.utils.config_loader import (
     create_multi_experiment_config, create_testing_config
@@ -30,18 +40,66 @@ from simulation.utils.parameters import (
     print_configuration_summary, get_all_scenarios, get_scenario_metadata
 )
 
-def setup_output_directories(base_dir="results"):
+DEFAULT_MULTI_SEED_N = 100
+
+def parse_seed_spec(seed_spec):
+    """Parse seed specification like '1,2,3' or '1-20'."""
+    if not seed_spec:
+        return []
+
+    seeds = []
+    for part in seed_spec.split(','):
+        token = part.strip()
+        if not token:
+            continue
+
+        range_match = re.match(r'^(\d+)\s*-\s*(\d+)$', token)
+        if range_match:
+            start = int(range_match.group(1))
+            end = int(range_match.group(2))
+            if end < start:
+                raise ValueError(f"Invalid seed range '{token}': end < start")
+            seeds.extend(range(start, end + 1))
+        else:
+            seeds.append(int(token))
+
+    unique_seeds = []
+    seen = set()
+    for seed in seeds:
+        if seed not in seen:
+            unique_seeds.append(seed)
+            seen.add(seed)
+
+    return unique_seeds
+
+def apply_global_seed(seed):
+    """Apply seed to Python and NumPy global RNGs."""
+    random.seed(seed)
+    np.random.seed(seed)
+
+def apply_seed_to_config(config, seed):
+    """Set run seed in config in-place."""
+    if "run_settings" not in config:
+        config["run_settings"] = {}
+    config["run_settings"]["random_seed"] = seed
+
+def setup_output_directories(base_dir="results", seed=None):
     """Set up output directory structure."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if seed is None:
+        experiment_dir = os.path.join(base_dir, f"multi_experiment_{timestamp}")
+    else:
+        experiment_dir = os.path.join(base_dir, f"seed_{seed:04d}")
     
     paths = {
         'base': base_dir,
-        'experiment': os.path.join(base_dir, f"multi_experiment_{timestamp}"),
-        'data': os.path.join(base_dir, f"multi_experiment_{timestamp}", "data"),
-        'visualizations': os.path.join(base_dir, f"multi_experiment_{timestamp}", "visualizations"),
-        'detailed': os.path.join(base_dir, f"multi_experiment_{timestamp}", "detailed_data"),
-        'validation': os.path.join(base_dir, f"multi_experiment_{timestamp}", "validation"),
-        'logs': os.path.join(base_dir, f"multi_experiment_{timestamp}", "logs")
+        'experiment': experiment_dir,
+        'data': os.path.join(experiment_dir, "data"),
+        'visualizations': os.path.join(experiment_dir, "visualizations"),
+        'detailed': os.path.join(experiment_dir, "detailed_data"),
+        'validation': os.path.join(experiment_dir, "validation"),
+        'logs': os.path.join(experiment_dir, "logs")
     }
     
     # Create all directories
@@ -69,8 +127,8 @@ def run_simulation(config, output_paths, verbose=True):
     if verbose:
         print(f"\n✅ Simulation completed in {simulation_time:.1f} seconds")
 
-    # ADD THIS TEST
-    success = test_csv_export(model)
+    # Keep CSV test export isolated per run to avoid cross-run overwrite.
+    success = test_csv_export(model, output_dir=os.path.join(output_paths['logs'], "csv_test"))
     
     return model
 
@@ -549,63 +607,123 @@ def create_analysis_report(model, output_paths, verbose=True):
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description='Run multi-experiment behavioral prosumer simulation')
-    parser.add_argument('--config', type=str, default='multi_experiment', 
+    parser.add_argument('--config', type=str, default='multi_experiment',
                        help='Configuration type (multi_experiment, testing)')
+    parser.add_argument('--N', type=int, default=None,
+                       help='Override number of households')
+    parser.add_argument('--seeds', type=str, default=None,
+                       help='Seed list/range (e.g., 1,2,3 or 1-20)')
     parser.add_argument('--output', type=str, default='results',
                        help='Output directory base path')
     parser.add_argument('--verbose', action='store_true', default=True,
                        help='Verbose output')
-    
+
     args = parser.parse_args()
-    
-    # Create configuration
+
     if args.config == 'testing':
         config = create_testing_config()
     else:
         config = create_multi_experiment_config()
-    
-    # Print configuration summary
-    if args.verbose:
-        print_configuration_summary()
-    
-    # Setup output directories
-    output_paths = setup_output_directories(args.output)
-    
-    try:
-        # Run simulation
-        model = run_simulation(config, output_paths, args.verbose)
-        # Add analyzer as model attribute for easy access
-        model.spatial_analyzer = IntegratedSpatialAnalyzer(model)
-        # Create immidiateanalyzer
-        ianalyzer = ImmediateSpatialAnalyzer(model)
 
-        # Create temporal special analyzer with
+    # Normalize to plain dict when factory returns SimulationConfig.
+    if hasattr(config, "config") and isinstance(config.config, dict):
+        config = config.config
+
+    multi_seed_mode = bool(args.seeds)
+
+    if args.N is not None:
+        config["num_households"] = args.N
+    elif multi_seed_mode:
+        config["num_households"] = DEFAULT_MULTI_SEED_N
+
+    seeds = parse_seed_spec(args.seeds) if args.seeds else []
+
+    if args.verbose:
+        try:
+            print_configuration_summary()
+        except UnicodeEncodeError:
+            print("Behavioral prosumer simulation configuration:")
+            print(f"  Population: {config.get('num_households')}")
+            print(f"  Duration (steps): {config.get('steps')}")
+
+    # Seed flow note:
+    # - Global RNGs are seeded in this runner via apply_global_seed().
+    # - Model-level seeding (NumPy/Python/Mesa RNG) is applied in MultiExperimentModel.__init__.
+    if multi_seed_mode:
+        n_value = config["num_households"]
+        base_output = os.path.join(args.output, f"N{n_value}")
+        os.makedirs(base_output, exist_ok=True)
+
+        if args.verbose:
+            print(f"\nMulti-seed mode: {len(seeds)} seed(s), N={n_value}, output={base_output}")
+            print("Heavy visualizations/secondary analyzers are skipped in multi-seed mode for runtime efficiency.")
+
+        failed_seeds = []
+        for seed in seeds:
+            try:
+                if args.verbose:
+                    print("\n" + "=" * 80)
+                    print(f"RUNNING SEED {seed}")
+                    print("=" * 80)
+
+                seed_config = copy.deepcopy(config)
+                apply_seed_to_config(seed_config, seed)
+                apply_global_seed(seed)
+                output_paths = setup_output_directories(base_output, seed=seed)
+
+                model = run_simulation(seed_config, output_paths, args.verbose)
+                export_data(model, output_paths, args.verbose)
+
+                if args.verbose:
+                    print(f"Seed {seed} completed. Results: {output_paths['experiment']}")
+            except Exception as e:
+                failed_seeds.append((seed, str(e)))
+                print(f"\nSeed {seed} failed: {e}")
+                import traceback
+                traceback.print_exc()
+
+        if failed_seeds:
+            print("\nSome seeds failed:")
+            for seed, err in failed_seeds:
+                print(f"  - seed {seed}: {err}")
+            sys.exit(1)
+
+        if args.verbose:
+            print("\n" + "=" * 80)
+            print("MULTI-SEED RUN COMPLETED SUCCESSFULLY")
+            print("=" * 80)
+            print(f"Results saved under: {base_output}")
+        return
+
+    configured_seed = config.get("run_settings", {}).get("random_seed", None)
+    if configured_seed is not None:
+        apply_global_seed(configured_seed)
+
+    output_paths = setup_output_directories(args.output)
+
+    try:
+        model = run_simulation(config, output_paths, args.verbose)
+        model.spatial_analyzer = IntegratedSpatialAnalyzer(model)
+        ianalyzer = ImmediateSpatialAnalyzer(model)
         temporal_analyzer = TemporalNetworkPropagationAnalyzer(model)
-        
-        # Export data
+
         export_data(model, output_paths, args.verbose)
-        
-        # Create visualizations
         create_visualizations(model, output_paths, args.verbose)
 
-        # run spatial analyzers
         model.spatial_analyzer.create_all_spatial_analyses()
-        # Run immidiate spatial analysis
         ianalyzer.create_all_immediate_analyses()
-        # Run temporal special analysis
         temporal_analyzer.create_all_temporal_analyses()
-        
-        # Create analysis report
+
         create_analysis_report(model, output_paths, args.verbose)
-        
+
         if args.verbose:
-            print("\n" + "="*80)
-            print("✅ MULTI-EXPERIMENT SIMULATION COMPLETED SUCCESSFULLY")
-            print("="*80)
-            print(f"📁 Results saved to: {output_paths['experiment']}")
-    
+            print("\n" + "=" * 80)
+            print("MULTI-EXPERIMENT SIMULATION COMPLETED SUCCESSFULLY")
+            print("=" * 80)
+            print(f"Results saved to: {output_paths['experiment']}")
+
     except Exception as e:
-        print(f"\n❌ Simulation failed: {e}")
+        print(f"\nSimulation failed: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

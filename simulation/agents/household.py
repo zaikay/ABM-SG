@@ -86,9 +86,12 @@ class Household(Agent):
         from ..utils.parameters import BEHAVIORAL_BIASES
         import numpy as np
         
-        # Create household-specific seed for reproducibility
-        household_seed = hash(self.unique_id) % (2**32)
-        np.random.seed(household_seed)
+        # Use a local RNG so behavioral coefficient sampling is reproducible
+        # without mutating global NumPy RNG state.
+        run_seed = self.config.get("run_settings", {}).get("random_seed", 0)
+        run_seed = int(run_seed) if run_seed is not None else 0
+        household_seed = (run_seed * 1000003 + int(self.unique_id)) % (2**32)
+        rng = np.random.RandomState(household_seed)
         
         # Store all behavioral coefficients in a dictionary
         self.behavioral_coefficients = {}
@@ -103,36 +106,35 @@ class Household(Agent):
             
             # Loss Aversion coefficients
             if bias_name == 'loss_aversion':
-                bias_coeffs['variation_std'] = np.random.normal(0, params['variation_std']
+                bias_coeffs['variation_std'] = rng.normal(0, params['variation_std']
                    )
             
             # Present Bias coefficients
             elif bias_name == 'present_bias':
-                bias_coeffs['beta_i'] = np.random.uniform(
+                bias_coeffs['beta_i'] = rng.uniform(
                     params.get('beta_min', 0.6), 
                     params.get('beta_max', 0.8)
                 )
             
             # Status Quo coefficients
             elif bias_name == 'status_quo':
-                bias_coeffs['individual_variation'] = np.random.normal(
+                bias_coeffs['individual_variation'] = rng.normal(
                     0, params.get('individual_variation', 0.08)
                 )
             
             # Herding coefficients
             elif bias_name == 'herding':
-                bias_coeffs['variation_std'] = np.random.normal(0, params['variation_std']
-                   )
+                sampled_susceptibility = rng.normal(0, params['variation_std'])
+                bias_coeffs['variation_std'] = max(sampled_susceptibility, -0.99)
+
             # optimism coefficients
             elif bias_name == 'optimism_bias':
-                bias_coeffs['individual_variation'] = np.random.normal(0, params.get('individual_variation', 0.05)
+                bias_coeffs['individual_variation'] = rng.normal(0, params.get('individual_variation', 0.05)
                 )
             
             # Store coefficients for this bias
             self.behavioral_coefficients[bias_name] = bias_coeffs
         
-        # Reset random seed
-        np.random.seed(None)
     
     def get_behavioral_coefficient(self, bias_name, coeff_name, default_value=0.5):
         """

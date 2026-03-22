@@ -184,7 +184,7 @@ class EnergySystem:
             if balance > 0:
                 # Excess generation fed to grid
                 hourly_grid_feed_in[hour] = balance
-                hourly_credits_earned[hour] = balance * FEED_IN_FACTOR
+                hourly_credits_earned[hour] = balance * self.grid_system.feed_in_factor
             else:
                 # Deficit - use credits if available, then grid
                 deficit = -balance

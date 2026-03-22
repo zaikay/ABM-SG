@@ -30,7 +30,7 @@ SOLAR_LIFETIME_YEARS = 20            # Restore standard (was 20)
 DISCOUNT_RATE = 0.04                 # r for NPV calculations
 
 # Grid parameters - ALIGNED with manuscript
-FEED_IN_FACTOR = 0.7                 # α_feed from manuscript (was 0.7)
+FEED_IN_FACTOR = 0                 # α_feed from manuscript (was 0.7)
 
 # Solar costs - REALISTIC current values
 BASE_SOLAR_COST = 3000               # Realistic 2024 cost (was 2500)

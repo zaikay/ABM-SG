@@ -7,6 +7,7 @@ Runs all scenarios (rational + behavioral) in a single simulation run.
 import time
 import numpy as np
 import networkx as nx
+import random
 from mesa import Model
 from mesa.time import RandomActivation
 
@@ -44,6 +45,7 @@ class MultiExperimentModel(Model):
         Args:
             config: Simulation configuration dictionary
         """
+        run_seed = config.get("run_settings", {}).get("random_seed", None)
         super().__init__()
         self.config = config
         self.running = True
@@ -53,9 +55,12 @@ class MultiExperimentModel(Model):
         self.scenarios = get_all_scenarios()
         self.enabled_biases = get_enabled_biases()
         
-        # Set random seed
-        if "run_settings" in config and "random_seed" in config["run_settings"]:
-            np.random.seed(config["run_settings"]["random_seed"])
+        # Set RNG seeds for reproducibility (NumPy, Python random, Mesa model RNG).
+        if run_seed is not None:
+            np.random.seed(run_seed)
+            random.seed(run_seed)
+            if hasattr(self, "random") and self.random is not None:
+                self.random.seed(run_seed)
         
         print(f"Initializing MultiExperimentModel with {len(self.scenarios)} scenarios:")
         for scenario in self.scenarios:
@@ -82,7 +87,7 @@ class MultiExperimentModel(Model):
         self.data_collector = MultiExperimentCollector(self, config)
         
         # Create detailed tracker
-        self.detailed_tracker = DetailedTracker(self, sample_size=5)
+        self.detailed_tracker = DetailedTracker(self, sample_size=5, seed=run_seed if run_seed is not None else 42)
         
         # Create network metrics analyzer
         self.network_metrics = NetworkMetrics(self)
