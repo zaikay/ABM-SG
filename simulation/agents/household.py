@@ -124,8 +124,9 @@ class Household(Agent):
             
             # Herding coefficients
             elif bias_name == 'herding':
-                bias_coeffs['variation_std'] = rng.normal(0, params['variation_std']
-                   )
+                sampled_susceptibility = rng.normal(0, params['variation_std'])
+                bias_coeffs['variation_std'] = max(sampled_susceptibility, -0.99)
+
             # optimism coefficients
             elif bias_name == 'optimism_bias':
                 bias_coeffs['individual_variation'] = rng.normal(0, params.get('individual_variation', 0.05)
