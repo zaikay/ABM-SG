@@ -6,11 +6,11 @@ Includes comprehensive behavioral biases configuration with literature-grounded 
 
 # Simulation parameters
 MONTHS_IN_YEAR = 12
-YEARS_TO_SIMULATE = 20
+YEARS_TO_SIMULATE = 30
 TOTAL_STEPS = YEARS_TO_SIMULATE * MONTHS_IN_YEAR
 
 # Population parameters
-NUM_HOUSEHOLDS = 5000
+NUM_HOUSEHOLDS = 100
 NEIGHBORS_PER_HOUSEHOLD = 10
 
 # Income parameters - ENHANCED for better heterogeneity
@@ -30,11 +30,14 @@ SOLAR_LIFETIME_YEARS = 20            # Restore standard (was 20)
 DISCOUNT_RATE = 0.04                 # r for NPV calculations
 
 # Grid parameters - ALIGNED with manuscript
-FEED_IN_FACTOR = 0                 # α_feed from manuscript (was 0.7)
+FEED_IN_FACTOR = 0.7                 # α_feed from manuscript (was 0.7)
 
-# Solar costs - REALISTIC current values
-BASE_SOLAR_COST = 3000               # Realistic 2024 cost (was 2500)
-SOLAR_COST_REDUCTION_ANNUAL = 0.05   # 
+# Solar costs - 
+BASE_SOLAR_COST = 3000               # Realistic 2024 cost (was 2500) UNUSED
+SOLAR_COST_REDUCTION_ANNUAL = 0.05   #
+# Economies of scale parameters (NREL/DOE methodology)
+SOLAR_FIXED_COSTS = 5500      # $ per installation
+SOLAR_VARIABLE_COST_PER_KW = 2000  # $ per kW
 
 # Energy prices
 INITIAL_FOSSIL_PRICE = 0.15
@@ -79,9 +82,9 @@ DAY_TYPE_VARIATIONS = {
 # NPV sigmoid parameters
 NPV_SIGMOID_STEEPNESS = 0.01  # κ for adoption probability sigmoid
 
-# Economies of scale parameters (NREL/DOE methodology)
-SOLAR_FIXED_COSTS = 5500      # $ per installation
-SOLAR_VARIABLE_COST_PER_KW = 2000  # $ per kW
+# Combined all-bias mechanism
+USE_COMBINED_FORMULATION = True  # False keeps the current sequential transformations
+
 
 # Metrics calculation configuration
 ENABLE_UNIFIED_METRICS = True  # Enable unified metrics calculation
@@ -157,7 +160,9 @@ BEHAVIORAL_BIASES = {
             'variation_std': 0.1, # Individual susceptibility distribution
             # Calibration parameters
             'target_effect_per_neighbor': 0.1,       # 7.8 pp per neighbor (scaled from B&G)
+            'npv_transform_gamma': 0.1, 
             'max_total_effect': 0.30,                  # 15 pp maximum (safety cap)
+            'herding_formulation': 2, # 0 = bounded additive (original) - 1 = absolute NPV shift - 2 = dual mechanism installation cost indexed
             'spatial_beta_shape_a': 2.5,    # Beta distribution for spatial influence TODELETE
             'spatial_beta_shape_b': 5.0,    # β_i ~ Beta(2.5, 5) TODELETE
             'class_beta_shape_a': 2.0,      # Beta distribution for class influence TODELETE

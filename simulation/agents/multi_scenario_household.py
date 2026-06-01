@@ -317,10 +317,10 @@ class MultiScenarioHousehold(Household):
         
         if herding_params:
             # Calculate spatial influence
-            spatial_influence = self.bias_manager._calculate_spatial_influence(self, herding_params)
+            spatial_influence = self.bias_manager._calculate_spatial_influence(self, herding_params,'herding')
             
             # Calculate class influence
-            class_influence = self.bias_manager._calculate_class_influence(self)
+            class_influence = self.bias_manager._calculate_class_influence(self,'herding')
             
             # Store current influences
             spatial_record = {

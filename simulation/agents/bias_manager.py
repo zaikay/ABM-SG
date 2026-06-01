@@ -7,7 +7,8 @@ COMPLETE VERSION - includes all missing functionality from original 600+ line fi
 
 import numpy as np
 from ..utils.parameters import (
-    BEHAVIORAL_BIASES, get_enabled_biases, NPV_SIGMOID_STEEPNESS
+    BEHAVIORAL_BIASES, get_enabled_biases, NPV_SIGMOID_STEEPNESS,
+    USE_COMBINED_FORMULATION
 )
 
 class BiasManager:
@@ -41,7 +42,7 @@ class BiasManager:
             'herding': self._apply_herding,
             'optimism_bias': self._apply_optimism_bias
         }
-        
+        self.rational_npv = 0
         # Cache for household-specific parameters (avoid recalculation)
         self._household_bias_cache = {}
         
@@ -50,7 +51,7 @@ class BiasManager:
         
         print(f"BiasManager initialized with {len(self.enabled_biases)} enabled biases")
 
-    def _calculate_combined_social_influence(self, household):
+    def _calculate_combined_social_influence(self, household, scenario_name):
         """
         Alternative formulation with saturation to prevent extreme effects.
         
@@ -58,8 +59,8 @@ class BiasManager:
         params = self.bias_params['herding']
         
         # Calculate influence components  
-        spatial_influence = self._calculate_spatial_influence(household, params)
-        class_influence = self._calculate_class_influence(household)
+        spatial_influence = self._calculate_spatial_influence(household, params, scenario_name)
+        class_influence = self._calculate_class_influence(household, scenario_name)
         
         # Weighted combination
         spatial_weight = params['spatial_weight']
@@ -128,6 +129,10 @@ class BiasManager:
         Returns:
             tuple[float, float]: (final_npv, final_probability)
         """
+        self.rational_npv = npv
+        if self.config.get('use_combined_formulation', USE_COMBINED_FORMULATION):
+            return self._apply_combined_formulation(household, npv, base_probability)
+
         current_npv = npv
         current_probability = base_probability
         
@@ -135,7 +140,7 @@ class BiasManager:
         #print(f"   Initial: NPV=${current_npv:.0f}, Probability={current_probability:.4f}")
         
         # Define bias application order (herding last due to additive component)
-        bias_order = ['loss_aversion', 'optimism_bias', 'present_bias', 'status_quo', ]
+        bias_order = ['loss_aversion', 'optimism_bias', 'present_bias', 'status_quo' ]
         
         # Apply each enabled bias in the defined order
         for bias_name in bias_order:
@@ -155,16 +160,95 @@ class BiasManager:
                 #    f"NPV ${previous_npv:.0f}→${current_npv:.0f} (Δ${npv_change:.0f}), "
                 #    f"Prob {previous_prob:.4f}→{current_probability:.4f} (Δ{prob_change:.4f})")
         
-        herding_npv, herding_probability = self._apply_herding(
-            household, current_npv, current_probability
-        )
-        # Ensure probability is base on last NVP
-        final_probability = herding_probability
+        if 'herding' in self.enabled_biases:
+            current_npv, current_probability = self._apply_herding(
+                household, current_npv, current_probability,'all_biases'
+            )
+        
+        final_probability = current_probability
         
         #print(f"   Final: NPV=${current_npv:.0f}, Probability={final_probability:.4f}")
         #print(f"   Total Change: NPV Δ${current_npv - npv:.0f}, Prob Δ{final_probability - base_probability:.4f}")
         
         return (current_npv, final_probability)
+
+    def _apply_combined_formulation(self, household, rational_npv, base_probability):
+        """
+        Non-recursive all-bias utility formulation.
+
+        Each bias acts once on an economic component instead of transforming a
+        scalar NPV sequentially:
+
+        U_i = beta_i * (1 + omega_i) * B
+              - lambda_i * (1 - omega_i) * C
+              - sigma_i * C
+              + rho_i * max(0, NPV_rational)
+
+        Here B is reconstructed as NPV_rational + C, matching the model's NPV
+        definition as discounted net benefits minus installation cost.
+        """
+        installation_cost = getattr(household, 'installation_cost', 15000)
+        discounted_benefit = rational_npv + installation_cost
+
+        lambda_i = 1.0
+        if 'loss_aversion' in self.enabled_biases:
+            params = self.bias_params['loss_aversion']
+            lambda_base = params['baseline_coefficient']
+            income_ratio = (self.median_income - household.income) / self.median_income
+            income_effect = np.tanh(income_ratio)
+            epsilon_i = household.get_behavioral_coefficient('loss_aversion', 'variation_std')
+            lambda_i = lambda_base + income_effect + epsilon_i
+            lambda_i = np.clip(lambda_i, params['min_coefficient'], params['max_coefficient'])
+
+        omega_i = 0.0
+        if 'optimism_bias' in self.enabled_biases:
+            params = self.bias_params['optimism_bias']
+            base_optimism = params['base_optimism']
+            individual_variation = household.get_behavioral_coefficient(
+                'optimism_bias', 'individual_variation'
+            )
+            omega_i = base_optimism + individual_variation
+            omega_i = np.clip(
+                omega_i,
+                params['effect_variation_min'],
+                params['effect_variation_max']
+            )
+
+        beta_i = 1.0
+        if 'present_bias' in self.enabled_biases:
+            beta_i = household.get_behavioral_coefficient('present_bias', 'beta_i')
+
+        sigma_i = 0.0
+        if 'status_quo' in self.enabled_biases:
+            params = self.bias_params['status_quo']
+            sigma_base = params['baseline_strength']
+            sigma_i = sigma_base + household.get_behavioral_coefficient(
+                'status_quo', 'individual_variation'
+            )
+            sigma_i = max(params['min_strength'], min(params['max_strength'], sigma_i))
+
+        # herding_utility = 0.0
+        # if 'herding' in self.enabled_biases:
+        #     rho_combined = self._calculate_combined_social_influence(household)
+        #     # Combined formulation uses herding formulation 2: social evidence
+        #     # contributes only when the rational economics are non-negative.
+        #     herding_utility = rho_combined * max(0.0, rational_npv)
+
+        utility = ( # adjusted_npv
+            beta_i * (1.0 + omega_i) * discounted_benefit
+            - lambda_i * (1.0 - omega_i) * installation_cost
+            - sigma_i * installation_cost
+        )
+        # herding_probability_mutiplier=0.0
+        # if 'herding' in self.enabled_biases:
+        #     herding_probability_mutiplier = rho_combined * self._npv_to_probability(max(0,utility))
+
+        # final_probability = max(0.0, min(1.0, self._npv_to_probability(utility)+herding_probability_mutiplier))
+        
+        final_probability = self._npv_to_probability(utility)
+        if 'herding' in self.enabled_biases:
+            utility, final_probability = self._apply_herding(household, utility, base_probability, 'all_biases')
+        return utility, final_probability
 
     def _apply_loss_aversion(self, household, npv, probability):
         """
@@ -262,7 +346,7 @@ class BiasManager:
         
         return (adjusted_npv, adjusted_probability)  # ✅ NOW returns both values (NPV unchanged)
 
-    def _apply_herding(self, household, npv, probability):
+    def _apply_herding(self, household, npv, probability, scenario_name='herding'):
         """
         Apply herding bias based on dual-channel social influence.
         
@@ -276,20 +360,56 @@ class BiasManager:
         - ρ_class = same income class adoption rate
         """
 
-                # Calculate combined social influence
-        rho_combined = self._calculate_combined_social_influence(household)
+        # Calculate combined social influence
+        rho_combined = self._calculate_combined_social_influence(household, scenario_name)
         
-        
-        # Apply Additive effect (conformity pressure) 
-        # herding_probability = self._npv_to_probability(npv)+rho_combined
-        # Apply bounded additive effect
-        base_p = self._npv_to_probability(npv)
-        herding_probability = base_p + (1.0 - base_p) * rho_combined
+        params = self.bias_params['herding']
+        formulation = params.get('herding_formulation', 0)
 
-        if probability > herding_probability :
-            print(f"========================== herding_probability: {herding_probability} probability: {probability}")
-        # NPV remains unchanged for herding bias
-        return (npv, herding_probability)  # ✅ NOW returns both values (NPV unchanged)
+        if formulation == 1:
+            # FORMULATION 1: absolute NPV shift
+            # Social signal magnitude proportional to absolute NPV value
+            # Shift = rho × |NPV| — scales with distance from break-even
+            # Property: deeply negative NPV gets larger shift but cannot cross zero
+            # unless rho approaches 1.0
+            signal_value = rho_combined * max(0,self.rational_npv)
+            adjusted_npv = npv + signal_value
+            herding_probability = self._npv_to_probability(adjusted_npv)
+            return (adjusted_npv, herding_probability)
+
+        elif formulation == 2:
+            # FORMULATION 2: dual mechanism, npv indexed
+            perception_shift = rho_combined * max(0,self.rational_npv)
+            adjusted_npv = npv + perception_shift
+            economic_feasibility = self._npv_to_probability(max(0,self.rational_npv))
+            base_p = self._npv_to_probability(adjusted_npv)
+            herding_probability = min(1.0,
+                base_p + rho_combined * economic_feasibility)
+            return (adjusted_npv, herding_probability)
+        
+        elif formulation == 3:
+
+            # Direct probability mutiplicative distortion independent of NPV sign
+            base_p = self._npv_to_probability(npv)
+            herding_probability = base_p * (1.0 + rho_combined)
+            return (npv, herding_probability)
+        
+        elif formulation == 4:
+
+            # Direct probability additive distortion
+            base_p = self._npv_to_probability(npv)
+            economic_feasibility = self._npv_to_probability(self.rational_npv)
+            herding_probability = min(1.0,
+                base_p + rho_combined * economic_feasibility)
+            return (npv, herding_probability)
+
+        else:
+            # FORMULATION 0: original bounded additive (default)
+            # Direct probability distortion independent of NPV sign
+            base_p = self._npv_to_probability(npv)
+            herding_probability = base_p + (1.0 - base_p) * rho_combined
+            return (npv, herding_probability)
+
 
     def _apply_optimism_bias(self, household, npv, probability):
         """
@@ -314,7 +434,7 @@ class BiasManager:
         
         return (adjusted_npv, adjusted_probability)
     
-    def _calculate_spatial_influence(self, household, params):
+    def _calculate_spatial_influence(self, household, params, scenario_name):
         """
         Calculate spatial influence using NetworkBuilder-created neighbor data.
         
@@ -341,7 +461,7 @@ class BiasManager:
         for neighbor_household, distance in household.spatial_neighbors:
             # Check neighbor's current adoption status
             if hasattr(neighbor_household, 'scenario_adoption'):
-                is_prosumer = neighbor_household.scenario_adoption.get('herding', False)
+                is_prosumer = neighbor_household.scenario_adoption.get(scenario_name, False)
             else:
                 is_prosumer = getattr(neighbor_household, 'is_prosumer', False)
             
@@ -351,7 +471,7 @@ class BiasManager:
         return prosumer_count / total_neighbors
     
 
-    def _calculate_class_influence(self, household):
+    def _calculate_class_influence(self, household, scenario_name):
         """
         Calculate class homophily influence.
         
@@ -378,7 +498,7 @@ class BiasManager:
         prosumer_count = 0
         for other in same_class_households:
             if hasattr(other, 'scenario_adoption'):
-                is_prosumer = other.scenario_adoption.get('herding') is True
+                is_prosumer = other.scenario_adoption.get(scenario_name) is True
             else:
                 is_prosumer = getattr(other, 'is_prosumer', False)
             
@@ -387,7 +507,7 @@ class BiasManager:
         
         return prosumer_count / len(same_class_households)
 
-    def _calculate_global_influence(self, household):
+    def _calculate_global_influence(self, household, scenario_name):
         """
         Calculate global bandwagon influence from overall population adoption rate.
         
@@ -411,7 +531,7 @@ class BiasManager:
         # Calculate overall adoption rate for herding scenario
         prosumer_count = 0
         for other in all_households:
-            is_prosumer = other.scenario_adoption.get('herding', getattr(other, 'is_prosumer', False))
+            is_prosumer = other.scenario_adoption.get(scenario_name, getattr(other, 'is_prosumer', False))
             if is_prosumer:
                 prosumer_count += 1
         
@@ -481,9 +601,9 @@ class BiasManager:
                     summary['bias_effects'][bias_name]['loss_aversion_coefficient'] = lambda_i
                 
                 elif bias_name == 'herding':
-                    spatial_influence = self._calculate_spatial_influence(household, self.bias_params['herding'])
-                    class_influence = self._calculate_class_influence(household)
-                    global_influence = self._calculate_global_influence(household)
+                    spatial_influence = self._calculate_spatial_influence(household, self.bias_params['herding'],'herding')
+                    class_influence = self._calculate_class_influence(household,'herding')
+                    global_influence = self._calculate_global_influence(household,'herding')
                     summary['bias_effects'][bias_name]['spatial_influence'] = spatial_influence
                     summary['bias_effects'][bias_name]['class_influence'] = class_influence
                     summary['bias_effects'][bias_name]['global_influence'] = global_influence

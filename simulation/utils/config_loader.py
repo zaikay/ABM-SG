@@ -27,6 +27,7 @@ class SimulationConfig:
             "num_households": NUM_HOUSEHOLDS,
             "neighbors_per_household": NEIGHBORS_PER_HOUSEHOLD,
             "steps": TOTAL_STEPS,
+            "use_combined_formulation": USE_COMBINED_FORMULATION,
             "income_params": {
                 "lognormal_mean": INCOME_LOGNORMAL_MEAN,
                 "lognormal_sd": INCOME_LOGNORMAL_SD,
@@ -64,6 +65,24 @@ class SimulationConfig:
                 "random_seed": 42,
                 "collect_data": True,
                 "data_collection_interval": 1  # Every month
+            },
+            "initial_prosumers": {
+                "enabled": False,
+                "count": 10, # initialization size
+                "activation_mode": "delayed",  # "initial" or "delayed"
+                "activation_step": 12,
+                "scenarios": [
+                    "deterministic_rational",
+                    "rational",
+                    "optimism_bias",
+                    "loss_aversion",
+                    "present_bias",
+                    "status_quo",
+                    "herding",
+                    "all_biases"
+                ],
+                "income_classes": [4, 5],
+                "selection": "random"  # "random" or "highest_income"
             }
         }
     

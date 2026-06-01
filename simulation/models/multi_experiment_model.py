@@ -78,10 +78,15 @@ class MultiExperimentModel(Model):
         # Create network (same as rational model)
         self._create_network()
 
-        # DELAYED PROSUMER INITIALIZATION - DESACTIVATED
-        #self.default_prosumer_id = None  # Will be set at step 12
-        #self.default_prosumer_created = False  # Flag to track creation
-        #self.delayed_prosumer_candidate = self._select_default_prosumer_candidate()
+        # Optional scenario-specific seed adopters for social influence scenarios.
+        self.initial_prosumer_config = self._get_initial_prosumer_config()
+        self.initial_prosumer_ids = []
+        self.initial_prosumers_created = False
+
+        if self.initial_prosumer_config["enabled"]:
+            self.initial_prosumer_ids = self._select_initial_prosumers()
+            if self.initial_prosumer_config["activation_mode"] == "initial":
+                self._activate_initial_prosumers(step=0)
         
         # Create multi-experiment data collector
         self.data_collector = MultiExperimentCollector(self, config)
@@ -186,70 +191,133 @@ class MultiExperimentModel(Model):
             
             print(f"Assigned income classes to {len(households)} households (quintile size: {quintile_size})")
     
-    def _select_default_prosumer_candidate(self):
+    def _get_initial_prosumer_config(self):
         """
-        Select but don't activate default prosumer candidate.
-        Returns household ID for delayed activation.
-        """
-        import random
-        
-        # Find upper income households (classes 4 & 5)
-        upper_income_households = [
-            h for h in self.schedule.agents 
-            if hasattr(h, 'income_class') and h.income_class in [4, 5] and
-            hasattr(h, 'scenario_adoption')  # MultiScenarioHousehold check
-        ]
-        
-        if not upper_income_households:
-            print("Warning: No upper income households found for default prosumer!")
-            return None
-        
-        # Randomly select candidate (but don't activate yet)
-        selected = random.choice(upper_income_households)
-        
-        print(f"Default prosumer candidate: Household {selected.unique_id} "
-            f"(class {selected.income_class}, income: ${selected.income:,.0f})")
-        print("Will be activated at step 12 when evaluation system becomes active")
-        
-        return selected.unique_id
+        Get optional scenario-specific seed adopter configuration.
 
-    def _create_delayed_default_prosumer(self, step):
+        These seed adopters initialize social influence without changing the
+        global physical `is_prosumer` flag used by the shared energy system.
         """
-        Create default prosumer at step 12 when evaluation system is active.
+        defaults = {
+            "enabled": False,
+            "count": 0,
+            "activation_mode": "delayed",
+            "activation_step": 12,
+            "scenarios": ["herding", "all_biases"],
+            "income_classes": [4, 5],
+            "selection": "random"
+        }
+
+        configured = self.config.get("initial_prosumers", {})
+        if configured is None:
+            configured = {}
+
+        result = defaults.copy()
+        result.update(configured)
+
+        result["enabled"] = bool(result.get("enabled", False))
+        result["count"] = max(0, int(result.get("count", 0)))
+        result["activation_step"] = max(0, int(result.get("activation_step", 0)))
+
+        activation_mode = str(result.get("activation_mode", "delayed")).lower()
+        if activation_mode in ["immediate", "initialization"]:
+            activation_mode = "initial"
+        if activation_mode not in ["initial", "delayed"]:
+            print(f"Warning: Unknown initial_prosumers activation_mode '{activation_mode}', using delayed")
+            activation_mode = "delayed"
+        result["activation_mode"] = activation_mode
+
+        result["scenarios"] = [
+            scenario for scenario in result.get("scenarios", [])
+            if scenario in self.scenarios
+        ]
+        if not result["scenarios"]:
+            result["enabled"] = False
+        if result["count"] <= 0:
+            result["enabled"] = False
+
+        return result
+
+    def _select_initial_prosumers(self):
         """
-        if self.delayed_prosumer_candidate is None:
-            return None
-        
-        # Find the candidate household
-        candidate_household = None
-        for agent in self.schedule.agents:
-            if (hasattr(agent, 'unique_id') and 
-                agent.unique_id == self.delayed_prosumer_candidate):
-                candidate_household = agent
-                break
-        
-        if candidate_household is None:
-            print(f"Warning: Cannot find candidate household {self.delayed_prosumer_candidate}")
-            return None
-        
-        # Now activate as prosumer (at step 12)
-        candidate_household.is_prosumer = True
-        candidate_household.installation_month = step  # Current step (12)
-        candidate_household.solar_capacity = 5.0
-        
-        # Mark as adopted in all scenarios with current step
-        for scenario in candidate_household.scenarios:
-            candidate_household.scenario_adoption[scenario] = True
-            candidate_household.adoption_months[scenario] = step
-        
-        print(f"Default prosumer activated at step {step}: "
-            f"Household {candidate_household.unique_id} "
-            f"(class {candidate_household.income_class}, "
-            f"income: ${candidate_household.income:,.0f})")
-        print(f"Adopted in scenarios: {list(candidate_household.scenarios)}")
-        
-        self.default_prosumer_created = True
-        return candidate_household.unique_id
+        Select seed adopters once, then activate them either immediately or later.
+        """
+        count = self.initial_prosumer_config["count"]
+        if count <= 0:
+            return []
+
+        income_classes = set(self.initial_prosumer_config.get("income_classes", []))
+        households = self.get_households()
+        candidates = [
+            household for household in households
+            if not income_classes or household.income_class in income_classes
+        ]
+
+        if not candidates:
+            print("Warning: No households match initial_prosumers income_classes")
+            return []
+
+        if count > len(candidates):
+            print(
+                f"Warning: Requested {count} initial prosumers, but only "
+                f"{len(candidates)} candidates are available"
+            )
+            count = len(candidates)
+
+        selection = self.initial_prosumer_config.get("selection", "random")
+        if selection == "highest_income":
+            selected = sorted(candidates, key=lambda h: h.income, reverse=True)[:count]
+        else:
+            selected = self.random.sample(candidates, count)
+
+        selected_ids = [household.unique_id for household in selected]
+        mode = self.initial_prosumer_config["activation_mode"]
+        scenarios = self.initial_prosumer_config["scenarios"]
+        step = self.initial_prosumer_config["activation_step"]
+        print(
+            f"Selected {len(selected_ids)} initial prosumer(s) for {scenarios} "
+            f"using {selection}; activation={mode}"
+            + (f" at step {step}" if mode == "delayed" else "")
+        )
+
+        return selected_ids
+
+    def _activate_initial_prosumers(self, step):
+        """
+        Activate configured seed adopters for herding-style scenarios.
+        """
+        if self.initial_prosumers_created or not self.initial_prosumer_ids:
+            return []
+
+        scenarios = self.initial_prosumer_config["scenarios"]
+        households_by_id = {household.unique_id: household for household in self.get_households()}
+        activated_ids = []
+
+        for household_id in self.initial_prosumer_ids:
+            household = households_by_id.get(household_id)
+            if household is None:
+                print(f"Warning: Cannot find initial prosumer household {household_id}")
+                continue
+
+            for scenario in scenarios:
+                household.scenario_adoption[scenario] = True
+                household.adoption_months[scenario] = step
+                household.scenario_probability[scenario] = max(
+                    household.scenario_probability.get(scenario, 0.0),
+                    1.0
+                )
+
+            activated_ids.append(household_id)
+
+        self.initial_prosumers_created = True
+
+        if activated_ids:
+            print(
+                f"Activated {len(activated_ids)} initial prosumer(s) at step {step} "
+                f"for scenarios: {scenarios}"
+            )
+
+        return activated_ids
 
     def _create_network(self):
         """
@@ -376,15 +444,16 @@ class MultiExperimentModel(Model):
         """
         current_step = self.schedule.steps
         
+        if (
+            self.initial_prosumer_config["enabled"]
+            and self.initial_prosumer_config["activation_mode"] == "delayed"
+            and not self.initial_prosumers_created
+            and current_step >= self.initial_prosumer_config["activation_step"]
+        ):
+            self._activate_initial_prosumers(current_step)
+
         # 1. Execute step for all agents (households calculate energy, central provider updates prices)
         self.schedule.step()
-
-        # Create default prosumer at step 12 (when evaluation becomes active) DESACTIVATED - SEED FOR HERDING BIAS
-        #if (current_step == 12 and 
-        #    not self.default_prosumer_created and 
-        #    self.delayed_prosumer_candidate is not None):
-        #    
-        #    self.default_prosumer_id = self._create_delayed_default_prosumer(current_step)
         
         # 2. Calculate unified system metrics if enabled
         households = self.get_households()
