@@ -39,7 +39,7 @@ class FocusedSpatialMetricsCalculator:
         
         # Track collection steps
         self.current_step = 0
-        self.snapshot_years = [2, 5, 10, 20]  # Years for network snapshots
+        self.snapshot_years = [2, 5, 10,15, 20,30]  # Years for network snapshots
         self.snapshot_steps = [y * 12 for y in self.snapshot_years]  # Convert to steps
         
         print(f"FocusedSpatialMetricsCalculator initialized for {len(self.scenarios)} scenarios")
@@ -53,7 +53,7 @@ class FocusedSpatialMetricsCalculator:
         
         # Calculate metrics at each step
         self.calculate_income_adoption_timeseries()
-        self.calculate_neighbor_evolution()
+        self.calculate_neighbor_evolution() # TODO comment for sobol
         
         # Capture adoption context for new adopters
         self.calculate_adoption_timing_context()

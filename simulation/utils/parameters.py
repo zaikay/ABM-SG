@@ -10,7 +10,7 @@ YEARS_TO_SIMULATE = 30
 TOTAL_STEPS = YEARS_TO_SIMULATE * MONTHS_IN_YEAR
 
 # Population parameters
-NUM_HOUSEHOLDS = 100
+NUM_HOUSEHOLDS = 5000
 NEIGHBORS_PER_HOUSEHOLD = 10
 
 # Income parameters - ENHANCED for better heterogeneity
@@ -288,8 +288,8 @@ SPATIAL_VISUALIZATION_CONFIG = {
         'grid': '#dee2e6'           # Light grid
     },
     'grid_layouts': {
-        '6x2': {'timepoints': [5, 20], 'figure_size': (12, 18)},
-        '6x4': {'timepoints': [1, 5, 10, 20], 'figure_size': (16, 18)}
+        '6x2': {'timepoints': [15, 30], 'figure_size': (12, 18)},
+        '6x4': {'timepoints': [5, 10, 20, 30], 'figure_size': (16, 18)}
     }
 }
 
@@ -356,10 +356,10 @@ SPATIAL_ANALYSIS_PARAMS = {
     
     # Temporal Analysis Parameters
     'temporal_analysis': {
-        'default_analysis_points': [12, 24, 60, 120, 180, 240],  # Years 1, 2, 5, 10, 15, 20 for 240-step simulation
-        'early_years_detailed': [12, 24, 36, 48, 60],           # Detailed analysis for first 5 years
-        'milestone_years': [60, 120, 180, 240],                  # Key milestone analysis points (5, 10, 15, 20 years)
-        'biennial_analysis': [24, 48, 72, 96, 120, 144, 168, 192, 216, 240],  # Every 2 years
+        'default_analysis_points': [24, 60, 120, 180, 240, 300, 360],  # Years 1, 2, 5, 10, 15, 20 for 240-step simulation
+        'early_years_detailed': [24, 36, 48, 60,120],           # Detailed analysis for first 10 years
+        'milestone_years': [60, 120, 180, 240, 300, 360],                  # Key milestone analysis points (5, 10, 15, 20 years)
+        'biennial_analysis': [24, 48, 72, 96, 120, 144, 168, 192, 216, 240, 264, 288, 312, 336, 360],  # Every 2 years
         'velocity_window': 5,                    # Time window for velocity calculations (steps)
         'cascade_time_window': 5,                # Max time between cascade adoptions (steps)
         'min_cascade_size': 3,                   # Minimum households in cascade

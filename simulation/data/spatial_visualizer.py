@@ -103,7 +103,7 @@ class SpatialVisualizer:
         """
         os.makedirs(output_dir, exist_ok=True)
         
-        timepoints = [5, 20]  # Years to visualize
+        timepoints = [15, 30]  # Years to visualize
         
         # Create 6x2 grid
         fig, axes = plt.subplots(7, 2, figsize=(12, 18))
@@ -186,7 +186,7 @@ class SpatialVisualizer:
         """
         os.makedirs(output_dir, exist_ok=True)
         
-        timepoints = [1, 5, 10, 20]  # Years to visualize
+        timepoints = [5, 10, 20, 30]  # Years to visualize
         
         # Create 6x4 grid
         fig, axes = plt.subplots(7, 4, figsize=(16, 18))
@@ -674,17 +674,12 @@ class SpatialVisualizer:
                 base_dir = os.path.dirname(self.data_path)
                 scenario_file = os.path.join(base_dir, f"{scenario}_data.csv")
                 
-                if os.path.exists(scenario_file):
-                    scenario_data = pd.read_csv(scenario_file)
-                    step_data = scenario_data[scenario_data['Step'] == step]
-                else:
-                    # Fallback to combined data
-                    if os.path.exists(self.data_path):
-                        data = pd.read_csv(self.data_path)
-                        step_data = data[(data['Scenario'] == scenario) & (data['Step'] == step)]
-                    else:
-                        print(f"No data found for {scenario} at step {step}")
-                        return []
+                if not os.path.exists(scenario_file):
+                    print(f"No scenario data file found: {scenario_file}")
+                    return []
+
+                scenario_data = pd.read_csv(scenario_file)
+                step_data = scenario_data[scenario_data['Step'] == step]
                 
                 if step_data.empty:
                     print(f"No data found for {scenario} at step {step}")
@@ -2226,7 +2221,7 @@ class SpatialVisualizer:
         os.makedirs(output_dir, exist_ok=True)
         
         # Get household data
-        households = self._get_households_for_scenario_timepoint(behavioral_scenario, 240)  # End of simulation
+        households = self._get_households_for_scenario_timepoint(behavioral_scenario, 360)  # End of simulation
         
         if not households:
             print(f"No household data available for scenario '{behavioral_scenario}'")
@@ -2271,7 +2266,7 @@ class SpatialVisualizer:
         print(f"Initial adopters (Year 0): {len(current_new_adopters)}")
         
         # Analyze cascades for each year
-        for year in range(1, 21):  # Years 1-20
+        for year in range(1, 31):  # Years 1-30
             step_start = (year - 1) * 12
             step_end = year * 12 - 1
             
@@ -2442,22 +2437,35 @@ class SpatialVisualizer:
         # Single scenario 10cm grid
         self.create_spatial_network_grid_10cm(output_dir,
             scenario="rational",  # or any other scenario
-            step=1  # Year 10
+            step=1  # Year 1
         )
         self.create_spatial_network_grid_10cm(output_dir,
             scenario="rational",
-            step=48  # Year 10
+            step=48  # Year 4
+        )
+        self.create_spatial_network_grid_10cm(output_dir,
+            scenario="rational",
+            step=60  # Year 5
         )
 
         # Multi-scenario comparison
         self.create_multi_scenario_network_grid(output_dir, 
             step=120
         )
+        # Multi-scenario comparison
+        self.create_multi_scenario_network_grid(output_dir, 
+            step=240
+        )
 
         # Detailed network analysis
         self.create_interactive_network_analysis(output_dir,
             scenario="herding",
             step=120  # Year 20
+        )
+        # Detailed network analysis
+        self.create_interactive_network_analysis(output_dir,
+            scenario="herding",
+            step=240  # Year 20
         )
 
         # Single scenario - all households by income class
@@ -2474,14 +2482,38 @@ class SpatialVisualizer:
             highlight_prosumers_only=True
         )
 
+        # Single scenario - all households by income class
+        self.create_spatial_network_grid_10cm_income_class(output_dir,
+            scenario="herding", 
+            step=120,
+            highlight_prosumers_only=False
+        )
+
+        # Single scenario - highlight prosumers only
+        self.create_spatial_network_grid_10cm_income_class(output_dir,
+            scenario="herding",
+            step=120, 
+            highlight_prosumers_only=True
+        )
+
         # Multi-scenario comparison all households by income class
         self.create_multi_scenario_network_grid_income_class(output_dir,
-            step=60,
+            step=120,
             highlight_prosumers_only=True
         )
         # Multi-scenario comparison - highlight prosumers only
         self.create_multi_scenario_network_grid_income_class(output_dir,
-            step=60,
+            step=120,
+            highlight_prosumers_only=True
+        )
+        # Multi-scenario comparison all households by income class
+        self.create_multi_scenario_network_grid_income_class(output_dir,
+            step=240,
+            highlight_prosumers_only=True
+        )
+        # Multi-scenario comparison - highlight prosumers only
+        self.create_multi_scenario_network_grid_income_class(output_dir,
+            step=240,
             highlight_prosumers_only=True
         )
         # ---
@@ -2513,6 +2545,16 @@ class SpatialVisualizer:
             step=240,
             show_only_new_prosumer_networks=True
         )
+        self.create_adoption_timeline_grid(output_dir,
+            scenario="rational",
+            step=300,
+            show_only_new_prosumer_networks=True
+        )
+        self.create_adoption_timeline_grid(output_dir,
+            scenario="rational",
+            step=360,
+            show_only_new_prosumer_networks=True
+        )
 
         self.create_adoption_timeline_grid(output_dir,
             scenario="herding",  # or any scenario
@@ -2542,6 +2584,16 @@ class SpatialVisualizer:
             step=240,
             show_only_new_prosumer_networks=True
         )
+        self.create_adoption_timeline_grid(output_dir,
+            scenario="herding",
+            step=300,
+            show_only_new_prosumer_networks=True
+        )
+        self.create_adoption_timeline_grid(output_dir,
+            scenario="herding",
+            step=360,
+            show_only_new_prosumer_networks=True
+        )
 
         self.create_adoption_timeline_grid(output_dir,
             scenario="all_biases",  # or any scenario
@@ -2568,6 +2620,16 @@ class SpatialVisualizer:
             step=240,
             show_only_new_prosumer_networks=True
         )
+        self.create_adoption_timeline_grid(output_dir,
+            scenario="all_biases",
+            step=300,
+            show_only_new_prosumer_networks=True
+        )
+        self.create_adoption_timeline_grid(output_dir,
+            scenario="all_biases",
+            step=360,
+            show_only_new_prosumer_networks=True
+        )
 
         # Full view with income similarity analysis
         self.create_adoption_timeline_grid_income_similarity(output_dir,
@@ -2580,6 +2642,20 @@ class SpatialVisualizer:
         self.create_adoption_timeline_grid_income_similarity(output_dir,
             scenario="all_biases",
             step=60,
+            show_only_new_prosumer_networks=True
+        )
+
+        # Full view with income similarity analysis
+        self.create_adoption_timeline_grid_income_similarity(output_dir,
+            scenario="herding",  # Perfect for testing social effects
+            step=120,  # Year 10
+            show_only_new_prosumer_networks=False
+        )
+
+        # Filtered view focusing on new prosumer networks
+        self.create_adoption_timeline_grid_income_similarity(output_dir,
+            scenario="all_biases",
+            step=120,
             show_only_new_prosumer_networks=True
         )
         

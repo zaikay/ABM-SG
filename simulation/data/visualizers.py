@@ -851,7 +851,7 @@ class SimulationVisualizer:
         # Select key years for comparison
         available_years = monthly_data["Year"].unique()
         comparison_years = []
-        for target_year in [1, 2, 5, 10, 15, 20]:
+        for target_year in [1, 2, 5, 10, 15, 20,30]:
             if target_year in available_years:
                 comparison_years.append(target_year)
         

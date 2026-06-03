@@ -401,13 +401,6 @@ class MultiExperimentCollector:
                 scenario_df.to_csv(filepath, index=False)
                 print(f"  Exported {scenario}: {len(scenario_df)} records")
         
-        # Export combined dataset
-        combined_df = self.get_combined_dataframe()
-        if not combined_df.empty:
-            combined_path = os.path.join(output_dir, "combined_scenarios.csv")
-            combined_df.to_csv(combined_path, index=False)
-            print(f"  Exported combined data: {len(combined_df)} records")
-        
         # Export system metrics
         system_df = self.get_system_metrics_dataframe()
         if not system_df.empty:

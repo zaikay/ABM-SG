@@ -49,7 +49,7 @@ class BiasManager:
         # Pre-calculate common values
         self.median_income = np.exp(self.config["income_params"]["lognormal_mean"])
         
-        print(f"BiasManager initialized with {len(self.enabled_biases)} enabled biases")
+        #print(f"BiasManager initialized with {len(self.enabled_biases)} enabled biases")
 
     def _calculate_combined_social_influence(self, household, scenario_name):
         """
@@ -73,8 +73,8 @@ class BiasManager:
         # Individual susceptibility
         susceptibility = household.get_behavioral_coefficient('herding', 'variation_std')
         
-        # Base effect (your 0.1)
-        base_effect = params['target_effect_per_neighbor']  # 0.1
+        # Base effect
+        base_effect = params['target_effect_per_neighbor']  # 0.1 (0.2)
         
         # Final effect
         rho_combined = base_effect * social_influence * (1 + susceptibility)
@@ -90,14 +90,15 @@ class BiasManager:
         """
         if bias_name not in self.enabled_biases:
             print(f"Warning: Bias '{bias_name}' not enabled, returning base probability")
-            return base_probability
+            return (npv, base_probability)
         
         if bias_name not in self.bias_methods:
             print(f"Warning: No implementation for bias '{bias_name}', returning base probability")
-            return base_probability
+            return (npv, base_probability)
         
         # Apply the specific bias using the unified interface
         try:
+            self.rational_npv = npv
             adjusted_npv, modified_probability = self.bias_methods[bias_name](household, npv, base_probability)  # ✅ NOW expects tuple
             
             # Ensure probability stays within valid bounds [0, 1]
@@ -381,10 +382,10 @@ class BiasManager:
             # FORMULATION 2: dual mechanism, npv indexed
             perception_shift = rho_combined * max(0,self.rational_npv)
             adjusted_npv = npv + perception_shift
-            economic_feasibility = self._npv_to_probability(max(0,self.rational_npv))
+            economic_feasibility = self._npv_to_probability(self.rational_npv)
             base_p = self._npv_to_probability(adjusted_npv)
             herding_probability = min(1.0,
-                base_p + rho_combined * economic_feasibility)
+                base_p + rho_combined)
             return (adjusted_npv, herding_probability)
         
         elif formulation == 3:

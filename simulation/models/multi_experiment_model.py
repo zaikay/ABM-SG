@@ -100,7 +100,7 @@ class MultiExperimentModel(Model):
         self.focused_spatial_metrics = FocusedSpatialMetricsCalculator(self)
         
         # Create validator
-        self.validator = ModelValidator(self, enabled=True)
+        self.validator = ModelValidator(self, enabled=False)
         
         # ❌ REMOVE THIS LINE - NO IMMEDIATE DATA COLLECTION
         # self.data_collector.collect_data()
@@ -472,14 +472,14 @@ class MultiExperimentModel(Model):
         # 3. COLLECT DATA BEFORE RESET (moved before end_step)
         self.data_collector.collect_data()
 
-        self.focused_spatial_metrics.calculate_step_metrics(current_step)
+        self.focused_spatial_metrics.calculate_step_metrics(current_step) # TODO comment for sobol
         
         # 4. Execute end-step actions for central provider (resets counters)
         self.central_provider.end_step()
         
         # 5. Track detailed data for sample households (all scenarios)
-        self.detailed_tracker.track_step_data(current_step)
-        self.detailed_tracker.track_hourly_data(current_step)
+        self.detailed_tracker.track_step_data(current_step) # TODO comment for sobol
+        self.detailed_tracker.track_hourly_data(current_step) # TODO comment for sobol
         
         # 6. Collect validation data
         if hasattr(self, 'validator') and self.validator.enabled:

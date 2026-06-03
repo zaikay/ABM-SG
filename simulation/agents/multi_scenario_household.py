@@ -68,7 +68,7 @@ class MultiScenarioHousehold(Household):
         self.decision_evaluation_count = 0
         self.last_evaluation_step = -1
         
-        print(f"Enhanced MultiScenarioHousehold {unique_id} initialized for {len(self.scenarios)} scenarios")
+        #print(f"Enhanced MultiScenarioHousehold {unique_id} initialized for {len(self.scenarios)} scenarios")
     
     def step(self):
         """
@@ -172,7 +172,7 @@ class MultiScenarioHousehold(Household):
                         self.scenario_adoption[bias_name] = True
                         self.adoption_months[bias_name] = current_month
                         print(f"  Household {self.unique_id}: {bias_name} adoption in month {current_month} "
-                            f"(prob: {biased_probability:.3f}, NPV: ${base_npv:.0f})")
+                            f"(prob: {biased_probability:.3f}, NPV: ${base_npv:.0f})") # TODO comment for sobol
 
             # 4. COMBINED BIAS SCENARIO - All biases applied sequentially
             if not self.scenario_adoption['all_biases']:

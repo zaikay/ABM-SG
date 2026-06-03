@@ -232,7 +232,7 @@ class Household(Agent):
             self.is_prosumer = True
             self.installation_month = current_month
             
-            print(f"Household {self.unique_id} adopted solar in month {current_month} with NPV {self.npv:.2f}")
+            #print(f"Household {self.unique_id} adopted solar in month {current_month} with NPV {self.npv:.2f}")
             return True
         return False
     
